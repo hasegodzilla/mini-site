@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="ja">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ミニToDo</title>
+    <style>
+        .handle {
+            cursor: grab;
+            user-select: none;
+            padding: 2px 6px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+
+        li.dragging {
+            opacity: .5;
+        }
+
+        li.over {
+            outline: 2px dashed #ccc;
+        }
+
+        select {
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid #ccc;
+            background: #fff;
+        }
+
+        .tag {
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            border: 1px solid #ddd;
+        }
+
+        .tag.high {
+            border-color: #ffb3b3;
+        }
+
+        .tag.mid {
+            border-color: #ffd9a6;
+        }
+
+        .tag.low {
+            border-color: #bfe7ff;
+        }
+
+        #search {
+            width: 100%;
+            margin-top: 10px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid #ccc;
+        }
+
+        body {
+            font-family: system-ui, sans-serif;
+            margin: 24px;
+            line-height: 1.7;
+            background: #fafafa;
+        }
+
+        .card {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 14px;
+            padding: 16px;
+            max-width: 760px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, .06);
+        }
+
+        h1 {
+            margin: 0 0 6px;
+        }
+
+        .row {
+            display: flex;
+            gap: 10px;
+            margin: 12px 0 8px;
+        }
+
+        input {
+            flex: 1;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid #ccc;
+        }
+
+        button {
+            padding: 10px 14px;
+            border-radius: 10px;
+            border: 1px solid #ccc;
+            background: #fff;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #f3f3f3;
+        }
+
+        ul {
+            list-style: none;
+            padding: 0;
+            margin: 12px 0 0;
+        }
+
+        li {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 10px;
+            border-radius: 10px;
+            border: 1px solid #eee;
+            margin-bottom: 8px;
+        }
+
+        li.done .text {
+            text-decoration: line-through;
+            opacity: .55;
+        }
+
+        .text {
+            flex: 1;
+        }
+
+        .pill {
+            font-size: 12px;
+            padding: 2px 8px;
+            border: 1px solid #ddd;
+            border-radius: 999px;
+            color: #555;
+        }
+
+        .hint {
+            color: #666;
+            font-size: 13px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <h1>ミニToDo</h1>
+        <div class="pill">追加・完了・削除・保存(localStorage)</div>
+
+        <div class="row">
+            <input id="input" placeholder="例：JSで保存を覚える / ポケモン育成 / 修論1段落" />
+
+            <select id="priority">
+                <option value="high">高</option>
+                <option value="mid" selected>中</option>
+                <option value="low">低</option>
+            </select>
+
+            <button id="add">追加</button>
+            <button id="clear">全削除</button>
+        </div>
+
+        <input id="search" placeholder="検索（例：修論 / JS / ポケモン）" />
+
+        <ul id="list"></ul>
+
+        <div class="hint">
+            ✔ チェックで完了 / 🗑で削除 / 更新しても残る<br>
+            次は「優先度」や「並び替え」も足せる
+        </div>
+    </div>
+
+    <script>
+        const input = document.getElementById("input");
+        const priority = document.getElementById("priority");
+        const addBtn = document.getElementById("add");
+        const clearBtn = document.getElementById("clear");
+        const list = document.getElementById("list");
+        const search = document.getElementById("search");
+
+        const KEY = "mini_todo_items";
+
+        /** @type {{text:string, done:boolean, priority:"high"|"mid"|"low"}[]} */
+        let items = [];
+
+        function save() {
+            localStorage.setItem(KEY, JSON.stringify(items));
+        }
+
+        function load() {
+            try {
+                items = JSON.parse(localStorage.getItem(KEY) || "[]");
+                if (!Array.isArray(items)) items = [];
+            } catch {
+                items = [];
+            }
+        }
+
+        function render() {
+            list.innerHTML = "";
+
+            const q = search.value.trim().toLowerCase();
+            const view = q ? items.filter(it => it.text.toLowerCase().includes(q)) : items;
+
+            view.forEach((item) => {
+                const idx = items.indexOf(item);
+
+                const li = document.createElement("li");
+                if (item.done) li.classList.add("done");
+
+                li.draggable = true;
+                li.dataset.idx = String(idx);
+
+
+                const checkbox = document.createElement("input");
+                checkbox.type = "checkbox";
+                checkbox.checked = item.done;
+                checkbox.addEventListener("change", () => {
+                    items[idx].done = checkbox.checked;
+                    save();
+                    render();
+                });
+
+                const handle = document.createElement("span");
+                handle.className = "handle";
+                handle.textContent = "≡";
+                handle.title = "ドラッグして並び替え";
+
+                const tag = document.createElement("span");
+                tag.className = `tag ${item.priority}`;
+                tag.textContent = item.priority === "high" ? "高" : item.priority === "mid" ? "中" : "低";
+
+                const span = document.createElement("span");
+                span.className = "text";
+                span.textContent = item.text;
+
+                const del = document.createElement("button");
+                del.textContent = "🗑";
+                del.title = "削除";
+                del.addEventListener("click", () => {
+                    items.splice(idx, 1);
+                    save();
+                    render();
+                });
+
+                li.appendChild(handle);
+                li.appendChild(checkbox);
+                li.appendChild(tag);
+                li.appendChild(span);
+                li.appendChild(del);
+                list.appendChild(li);
+            });
+        }
+
+        let dragFrom = null;
+
+        list.addEventListener("dragstart", (e) => {
+            const li = e.target.closest("li");
+            if (!li) return;
+            dragFrom = Number(li.dataset.idx);
+            li.classList.add("dragging");
+            e.dataTransfer.effectAllowed = "move";
+        });
+
+        list.addEventListener("dragend", (e) => {
+            const li = e.target.closest("li");
+            if (!li) return;
+            li.classList.remove("dragging");
+            list.querySelectorAll("li.over").forEach(x => x.classList.remove("over"));
+        });
+
+        list.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            const li = e.target.closest("li");
+            if (!li) return;
+            li.classList.add("over");
+            e.dataTransfer.dropEffect = "move";
+        });
+
+        list.addEventListener("dragleave", (e) => {
+            const li = e.target.closest("li");
+            if (!li) return;
+            li.classList.remove("over");
+        });
+
+        list.addEventListener("drop", (e) => {
+            e.preventDefault();
+            const li = e.target.closest("li");
+            if (!li) return;
+
+            const to = Number(li.dataset.idx);
+            const from = dragFrom;
+            if (from === null || Number.isNaN(from) || Number.isNaN(to) || from === to) return;
+
+            const [moved] = items.splice(from, 1);
+            items.splice(to, 0, moved);
+
+            save();
+            render();
+        });
+
+
+        function addItem() {
+            const text = input.value.trim();
+            if (!text) return;
+
+            const p = priority.value; // "high" | "mid" | "low"
+            items.unshift({ text, done: false, priority: p });
+
+            input.value = "";
+            save();
+            render();
+            input.focus();
+        }
+
+        addBtn.addEventListener("click", addItem);
+        search.addEventListener("input", render);
+        search.addEventListener("keydown", (e) => {
+            if (e.key === "Escape") {
+                search.value = "";
+                render();
+            }
+        });
+
+
+        input.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") addItem();
+        });
+
+        clearBtn.addEventListener("click", () => {
+            if (!confirm("全部消す？")) return;
+            items = [];
+            save();
+            render();
+        });
+
+        // 起動
+        load();
+        items = items.map(it => ({
+            text: it?.text ?? "",
+            done: !!it?.done,
+            priority: it?.priority ?? "mid"
+        }));
+        render();
+        input.focus();
+    </script>
+</body>
+
+</html>
